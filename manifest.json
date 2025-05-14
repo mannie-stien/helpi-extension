@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "Helpi",
+  "version": "0.0.1",
+  "description": "AI-powered assistant for summarizing, explaining, and translating web content",
+  "icons": {
+    "16": "/assets/icons/help2.png",
+    "48": "/assets/icons/help2.png",
+    "128": "/assets/icons/help2.png"
+  },
+  "permissions": ["activeTab", "storage", "contextMenus"],
+  "host_permissions": ["https://api.together.xyz/"],
+  "background": {
+    "service_worker": "src/background/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "/assets/icons/help2.png",
+      "32": "/assets/icons/help2.png",
+      "48": "/assets/icons/help2.png",
+      "128": "/assets/icons/help2.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content.js"],
+      "css": ["src/content/styles.css"],
+      "type": "module"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/content/assistant.js",
+        "dist/output.css",
+        "assets/fonts/*",
+        "assets/icons/*",
+        "assets/store/*",
+        "src/content/styles.js",
+        "src/content/detectContext.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

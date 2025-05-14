@@ -1,0 +1,23 @@
+/* Additional styles for content script */
+#smart-highlight-float-btn:hover {
+  transform: scale(1.1);
+}
+
+/* Animation for floating button */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
+  100% { transform: translateY(0px); }
+}
+
+#smart-highlight-float-btn {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Responsive modal */
+@media (max-width: 600px) {
+  .smart-modal {
+    width: 95%;
+    max-width: none;
+  }
+}

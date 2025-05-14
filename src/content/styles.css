@@ -1,0 +1,136 @@
+/* Floating button styles */
+.assistant-floating-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background-color: #4a6bff;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
+  transition: all 0.2s ease;
+}
+
+.assistant-floating-button:hover {
+  background-color: #3a5bef;
+  transform: scale(1.05);
+}
+
+.assistant-floating-button.active {
+  background-color: #ff4757;
+}
+
+/* Tooltip styles */
+.assistant-tooltip {
+  position: absolute;
+  width: 300px;
+  max-height: 400px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.assistant-tooltip.hidden {
+  display: none;
+}
+
+.tooltip-header {
+  padding: 12px 16px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  font-weight: bold;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.close-tooltip {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #6c757d;
+}
+
+.tooltip-content {
+  padding: 16px;
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+.tooltip-footer {
+  padding: 12px 16px;
+  border-top: 1px solid #e9ecef;
+  display: flex;
+  justify-content: center;
+}
+
+/* Action buttons */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.action-buttons button {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: 4px;
+  background-color: #f1f3f5;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.action-buttons button:hover {
+  background-color: #e9ecef;
+}
+
+.summarize-btn {
+  width: 100%;
+  padding: 8px;
+  border: none;
+  border-radius: 4px;
+  background-color: #4a6bff;
+  color: white;
+  cursor: pointer;
+}
+
+.summarize-btn:hover {
+  background-color: #3a5bef;
+}
+
+/* Loading spinner */
+.loading-spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #4a6bff;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 12px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Response styling */
+.response {
+  line-height: 1.5;
+}
+
+.response p {
+  margin-bottom: 8px;
+}
