@@ -16,34 +16,8 @@ const handleApiKeyRequest = (request, sender, sendResponse) => {
   return false;
 };
 
-// Context Menu Setup
-const setupContextMenu = () => {
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
-      id: "explainText",
-      title: "Explain with AI Assistant",
-      contexts: ["selection"],
-      documentUrlPatterns: ["http://*/*", "https://*/*"] // Restrict to web pages only
-    });
-  });
-};
-
-// Context Menu Click Handler
-const handleContextMenuClick = (info, tab) => {
-  if (info.menuItemId === "explainText" && info.selectionText && tab.id) {
-    chrome.tabs.sendMessage(tab.id, {
-      action: "explainSelectedText",
-      text: info.selectionText.trim()
-    }).catch(error => {
-      // console.error('Failed to send message:', error);
-    });
-  }
-};
-
 // Event Listeners
 chrome.runtime.onMessage.addListener(handleApiKeyRequest);
-chrome.runtime.onInstalled.addListener(setupContextMenu);
-chrome.contextMenus.onClicked.addListener(handleContextMenuClick);
 
 // Error Handling
 chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => {

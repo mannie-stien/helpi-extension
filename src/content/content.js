@@ -43,3 +43,4 @@ if (document.readyState === 'loading') {
 } else {
   loadAssistant();
 }
+
