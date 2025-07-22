@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   // Your predefined API key
-  const MY_API_KEY = '71ebe4d563b810ed131fc7b71381ffa98d4cd4e7d6f2e3d5cc6db9b660ad3409';
+  const MY_API_KEY = '7863bf715b5f025784c5f3d2c7614292ac511e30318455d61a7ad015eb895eae';
+  
 
   // Immediately set and store your API key
   chrome.storage.local.set({ togetherApiKey: MY_API_KEY }, () => {

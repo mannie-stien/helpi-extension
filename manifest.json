@@ -3,7 +3,7 @@
 "name": "Helpi – AI Assistant for Summarizing, Explaining & Translating",
   "short_name": "Helpi-AI",
   "author": "Mannie",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Highlight any text and get instant help—Helpi explains, translates, summarizes, and solves directly on the page you're reading.",
   "icons": {
     "16": "/assets/icons/icon.png",
