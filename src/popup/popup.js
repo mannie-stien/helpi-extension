@@ -1,35 +1,36 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // Load saved states
-  chrome.storage.local.get(['showAssistant', 'togetherApiKey'], (result) => {
-    document.getElementById('toggleAssistant').checked = result.showAssistant ?? true;
-    if (result.togetherApiKey) {
-      document.getElementById("apiKey").value = result.togetherApiKey;
-    }
+  // Your predefined API key
+  const MY_API_KEY = '71ebe4d563b810ed131fc7b71381ffa98d4cd4e7d6f2e3d5cc6db9b660ad3409';
+
+  // Immediately set and store your API key
+  chrome.storage.local.set({ togetherApiKey: MY_API_KEY }, () => {
+    console.log("API key stored successfully");
   });
 
-  // Save API key
-  document.getElementById("saveBtn").addEventListener("click", () => {
-    const apiKey = document.getElementById("apiKey").value.trim();
-    if (!apiKey) {
-      alert("Please enter your Together.ai API key");
-      return;
-    }
-    chrome.storage.local.set({ togetherApiKey: apiKey });
-  });
+  // Remove API key input section if it exists
+  const apiKeySection = document.getElementById('apiKeySection');
+  if (apiKeySection) apiKeySection.remove();
 
-  // Handle toggle
-  document.getElementById("toggleAssistant").addEventListener("change", (e) => {
-    const show = e.target.checked;
-    chrome.storage.local.set({ showAssistant: show });
+  // Load and handle the toggle state
+  chrome.storage.local.get(['showAssistant'], (result) => {
+    const toggle = document.getElementById('toggleAssistant');
+    toggle.checked = result.showAssistant ?? true; // Default to true if not set
 
-    // Only send to active tab initially
-    chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
-      if (tabs[0]?.id) {
-        chrome.tabs.sendMessage(tabs[0].id, { 
-          type: "TOGGLE_ASSISTANT", 
-          show 
-        }).catch(() => {}); // Silently catch errors
-      }
+    toggle.addEventListener("change", (e) => {
+      const show = e.target.checked;
+      chrome.storage.local.set({ showAssistant: show });
+
+      // Send to all content scripts in active tabs
+      chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+        tabs.forEach(tab => {
+          if (tab?.id) {
+            chrome.tabs.sendMessage(tab.id, { 
+              type: "TOGGLE_ASSISTANT", 
+              show 
+            }).catch(() => {}); // Silently catch errors
+          }
+        });
+      });
     });
   });
 });

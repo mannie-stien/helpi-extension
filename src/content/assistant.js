@@ -1,15 +1,11 @@
-/**
- * Main assistant class that handles all UI interactions and API calls
- */
+import { callTogetherAPI } from "./callTogetherAPI.js";
 import { detectContentType } from "./detectContext.js";
 import { injectStyles } from "./styles.js";
 
 export class Assistant {
   constructor() {
     this.initialized = false;
-
     this.assistantActive = false;
-    this.floatingButton = null;
     this.tooltip = null;
     this.currentSelection = "";
     this.apiEndpoint = "https://api.together.xyz/inference";
@@ -22,20 +18,17 @@ export class Assistant {
       this.init();
       return;
     }
-    if (!this.floatingButton) {
-      this.createFloatingButton();
-    }
-    this.floatingButton.style.display = "block";
+    
+    this.assistantActive = true;
     document.body.style.cursor = "text";
   }
 
   hideButton() {
-    if (this.floatingButton) {
-      this.floatingButton.style.display = "none";
-      this.hideTooltip();
-      document.body.style.cursor = "default";
-    }
+    this.assistantActive = false;
+    this.hideTooltip();
+    document.body.style.cursor = "default";
   }
+  
   /**
    * Initialize the assistant on the page
    */
@@ -43,7 +36,6 @@ export class Assistant {
     if (this.initialized) return;
 
     injectStyles();
-    this.createFloatingButton();
     this.createTooltip();
     this.setupSelectionListener();
     this.initialized = true;
@@ -53,29 +45,6 @@ export class Assistant {
     if (showAssistant !== false) {
       this.showButton();
     }
-  }
-
-  /**
-   * Create the floating assistant button
-   */
-  createFloatingButton() {
-    this.floatingButton = document.createElement("button");
-    this.floatingButton.className = "assistant-floating-button";
-    this.floatingButton.setAttribute("aria-label", "AI Assistant");
-    this.floatingButton.innerHTML = `
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="white"/>
-        <path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z" fill="white"/>
-        <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z" fill="white"/>
-      </svg>
-    `;
-
-    this.floatingButton.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this.toggleAssistant();
-    });
-
-    document.body.appendChild(this.floatingButton);
   }
 
   /**
@@ -117,7 +86,6 @@ export class Assistant {
    */
   toggleAssistant() {
     this.assistantActive = !this.assistantActive;
-    this.floatingButton.classList.toggle("active", this.assistantActive);
 
     if (this.assistantActive) {
       document.body.style.cursor = "text";
@@ -153,8 +121,6 @@ export class Assistant {
     });
   }
 
-
-
   /**
    * Show tooltip near the selected text with context-aware buttons
    */
@@ -188,127 +154,91 @@ export class Assistant {
    * Generate context-aware buttons based on detected content type
    */
   getContextButtons() {
-    switch (this.contextType) {
-      case "code":
-        return `
-          <button class="explain-code-btn">Explain Code</button>
-          <button class="improve-code-btn">Improve Code</button>
-          <button class="debug-code-btn">Debug Code</button>
-          <button class="ask-btn">Ask AI</button>
-        `;
-      case "question":
-        return `
-          <button class="answer-btn">Answer Question</button>
-          <button class="explain-btn">Explain Concept</button>
-          <button class="ask-btn">Ask AI</button>
-        `;
-      case "math":
-        return `
-          <button class="solve-btn">Solve</button>
-          <button class="explain-math-btn">Explain Steps</button>
-          <button class="ask-btn">Ask AI</button>
-        `;
-      case "term":
-        return `
-          <button class="define-btn">Define</button>
-          <button class="explain-btn">Explain</button>
-          <button class="examples-btn">Give Examples</button>
-          <button class="ask-btn">Ask AI</button>
-        `;
-      case "foreign":
-        return `
-          <button class="translate-btn">Translate</button>
-          <button class="ask-btn">Ask AI</button>
-        `;
-      case "paragraph":
-        return `
-          <button class="summarize-text-btn">Summarize</button>
-          <button class="explain-btn">Explain</button>
-          <button class="key-points-btn">Key Points</button>
-          <button class="ask-btn">Ask AI</button>
-        `;
-      default:
-        return `
-          <button class="explain-btn">Explain</button>
-          <button class="define-btn">Define</button>
-          <button class="translate-btn">Translate</button>
-          <button class="ask-btn">Ask AI</button>
-        `;
-    }
-  }
+  const buttonConfigs = {
+    code: [
+      { class: 'explain-code-btn', text: 'Explain Code' },
+      { class: 'improve-code-btn', text: 'Improve Code' },
+      { class: 'debug-code-btn', text: 'Debug Code' }
+    ],
+    question: [
+      { class: 'answer-btn', text: 'Answer Question' },
+      { class: 'explain-btn', text: 'Explain Concept' }
+    ],
+    math: [
+      { class: 'solve-btn', text: 'Solve' },
+      { class: 'explain-math-btn', text: 'Explain Steps' }
+    ],
+    term: [
+      { class: 'define-btn', text: 'Define' },
+      { class: 'explain-btn', text: 'Explain' },
+      { class: 'examples-btn', text: 'Give Examples' }
+    ],
+    foreign: [
+      { class: 'translate-btn', text: 'Translate' }
+    ],
+    paragraph: [
+      { class: 'summarize-text-btn', text: 'Summarize' },
+      { class: 'explain-btn', text: 'Explain' },
+      { class: 'key-points-btn', text: 'Key Points' }
+    ],
+    default: [
+      { class: 'explain-btn', text: 'Explain' },
+      { class: 'define-btn', text: 'Define' },
+      { class: 'translate-btn', text: 'Translate' }
+    ]
+  };
+
+  // Get buttons for current context or default
+  const buttons = buttonConfigs[this.contextType] || buttonConfigs.default;
+  
+  // Add Ask AI button to all contexts
+  buttons.push({ class: 'ask-btn', text: 'Ask AI' });
+
+  // Generate HTML
+  return buttons.map(btn => 
+    `<button class="${btn.class}">${btn.text}</button>`
+  ).join('');
+}
 
   /**
    * Add event listeners to the context-aware buttons
    */
-  addButtonEventListeners(content) {
-    // Common buttons
-    if (content.querySelector(".explain-btn")) {
-      content
-        .querySelector(".explain-btn")
-        .addEventListener("click", () => this.handleExplain());
-    }
-    if (content.querySelector(".define-btn")) {
-      content
-        .querySelector(".define-btn")
-        .addEventListener("click", () => this.handleDefine());
-    }
-    if (content.querySelector(".translate-btn")) {
-      content
-        .querySelector(".translate-btn")
-        .addEventListener("click", () => this.handleTranslate());
-    }
-    if (content.querySelector(".ask-btn")) {
-      content
-        .querySelector(".ask-btn")
-        .addEventListener("click", () => this.handleAsk());
-    }
 
-    // Context-specific buttons
-    if (content.querySelector(".explain-code-btn")) {
-      content
-        .querySelector(".explain-code-btn")
-        .addEventListener("click", () => this.handleExplainCode());
-    }
-    if (content.querySelector(".improve-code-btn")) {
-      content
-        .querySelector(".improve-code-btn")
-        .addEventListener("click", () => this.handleImproveCode());
-    }
-    if (content.querySelector(".debug-code-btn")) {
-      content
-        .querySelector(".debug-code-btn")
-        .addEventListener("click", () => this.handleDebugCode());
-    }
-    if (content.querySelector(".answer-btn")) {
-      content
-        .querySelector(".answer-btn")
-        .addEventListener("click", () => this.handleAnswerQuestion());
-    }
-    if (content.querySelector(".solve-btn")) {
-      content
-        .querySelector(".solve-btn")
-        .addEventListener("click", () => this.handleSolveMath());
-    }
-    if (content.querySelector(".explain-math-btn")) {
-      content
-        .querySelector(".explain-math-btn")
-        .addEventListener("click", () => this.handleExplainMath());
-    }
-    if (content.querySelector(".examples-btn")) {
-      content
-        .querySelector(".examples-btn")
-        .addEventListener("click", () => this.handleGiveExamples());
-    }
-    if (content.querySelector(".summarize-text-btn")) {
-      content
-        .querySelector(".summarize-text-btn")
-        .addEventListener("click", () => this.handleSummarizeText());
-    }
-    if (content.querySelector(".key-points-btn")) {
-      content
-        .querySelector(".key-points-btn")
-        .addEventListener("click", () => this.handleKeyPoints());
-    }
+  /**
+   * Adds event listeners to all context-aware buttons in the tooltip
+   * @param {HTMLElement} content - The tooltip content element
+   */
+  addButtonEventListeners(content) {
+    // Button handler mapping
+    const buttonHandlers = {
+      // Common buttons
+      '.explain-btn': () => this.handleExplain(),
+      '.define-btn': () => this.handleDefine(),
+      '.translate-btn': () => this.handleTranslate(),
+      '.ask-btn': () => this.handleAsk(),
+      
+      // Context-specific buttons
+      '.explain-code-btn': () => this.handleExplainCode(),
+      '.improve-code-btn': () => this.handleImproveCode(),
+      '.debug-code-btn': () => this.handleDebugCode(),
+      '.answer-btn': () => this.handleAnswerQuestion(),
+      '.solve-btn': () => this.handleSolveMath(),
+      '.explain-math-btn': () => this.handleExplainMath(),
+      '.examples-btn': () => this.handleGiveExamples(),
+      '.summarize-text-btn': () => this.handleSummarizeText(),
+      '.key-points-btn': () => this.handleKeyPoints()
+    };
+
+    // Add event listeners for each button type
+    Object.entries(buttonHandlers).forEach(([selector, handler]) => {
+      const button = content.querySelector(selector);
+      if (button) {
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          handler();
+        });
+      }
+    });
   }
 
   /**
@@ -466,73 +396,12 @@ export class Assistant {
     this.showLoading();
 
     try {
-      const response = await this.callTogetherAPI(prompt);
+      const response = await callTogetherAPI(prompt);
       this.showResponse(response);
     } catch (error) {
       this.showError(error.message);
     } finally {
       this.isProcessing = false;
-    }
-  }
-
-  /**
-   * Call the Together.ai API
-   */
-  async callTogetherAPI(prompt) {
-    try {
-      // Get API key from storage
-      const { apiKey } = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ action: "getApiKey" }, resolve);
-      });
-
-      if (!apiKey) {
-        throw new Error(
-          "API key not set. Please set your Together.ai API key in extension settings."
-        );
-      }
-
-      const response = await fetch(this.apiEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "mistralai/Mixtral-8x7B-Instruct-v0.1",
-          prompt: prompt,
-          // max_tokens: 1000,
-          temperature: 0.7,
-          top_p: 0.7,
-          top_k: 50,
-          repetition_penalty: 1,
-          stop: ["</s>"],
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.error?.message ||
-            `API request failed with status ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-
-      // Handle different response formats
-      if (data.output?.choices?.[0]?.text) {
-        return data.output.choices[0].text;
-      } else if (data.choices?.[0]?.text) {
-        return data.choices[0].text;
-      } else if (data.output) {
-        return data.output;
-      } else {
-        // console.error("Unexpected API response format:", data);
-        return "Sorry, I couldn't process the response. The API format may have changed.";
-      }
-    } catch (error) {
-      // console.error("API call failed:", error);
-      throw error;
     }
   }
 

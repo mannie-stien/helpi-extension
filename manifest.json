@@ -1,14 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "Helpi",
-  "version": "0.0.1",
-  "description": "AI-powered assistant for summarizing, explaining, and translating web content",
+"name": "Helpi – AI Assistant for Summarizing, Explaining & Translating",
+  "short_name": "Helpi-AI",
+  "author": "Mannie",
+  "version": "0.1.1",
+  "description": "Highlight any text and get instant help—Helpi explains, translates, summarizes, and solves directly on the page you're reading.",
   "icons": {
-    "16": "/assets/icons/help2.png",
-    "48": "/assets/icons/help2.png",
-    "128": "/assets/icons/help2.png"
+    "16": "/assets/icons/icon.png",
+    "48": "/assets/icons/icon.png",
+    "128": "/assets/icons/icon.png"
   },
-  "permissions": ["activeTab", "storage", "contextMenus"],
+  "permissions": ["activeTab", "storage"],
   "host_permissions": ["https://api.together.xyz/"],
   "background": {
     "service_worker": "src/background/background.js",
@@ -17,10 +19,10 @@
   "action": {
     "default_popup": "src/popup/popup.html",
     "default_icon": {
-      "16": "/assets/icons/help2.png",
-      "32": "/assets/icons/help2.png",
-      "48": "/assets/icons/help2.png",
-      "128": "/assets/icons/help2.png"
+      "16": "/assets/icons/icon.png",
+      "32": "/assets/icons/icon.png",
+      "48": "/assets/icons/icon.png",
+      "128": "/assets/icons/icon.png"
     }
   },
   "content_scripts": [
@@ -28,7 +30,9 @@
       "matches": ["<all_urls>"],
       "js": ["src/content/content.js"],
       "css": ["src/content/styles.css"],
-      "type": "module"
+      "type": "module",
+      "all_frames": true,
+      "match_about_blank": true
     }
   ],
   "web_accessible_resources": [
@@ -40,7 +44,8 @@
         "assets/icons/*",
         "assets/store/*",
         "src/content/styles.js",
-        "src/content/detectContext.js"
+        "src/content/detectContext.js",
+        "src/content/callTogetherAPI.js"
       ],
       "matches": ["<all_urls>"]
     }
