@@ -1,3 +1,57 @@
+/**
+ * Detect if selection contains visual content (images, charts, diagrams)
+ */
+export function detectVisualContent(selection) {
+    if (!selection || selection.rangeCount === 0) return null;
+    
+    try {
+        const range = selection.getRangeAt(0);
+        const container = range.commonAncestorContainer;
+        const element = container.nodeType === 3 ? container.parentElement : container;
+        
+        // Check for images
+        const img = element.tagName === 'IMG' ? element : element.querySelector('img');
+        if (img) {
+            return {
+                type: 'image',
+                element: img,
+                src: img.src,
+                alt: img.alt,
+                width: img.naturalWidth,
+                height: img.naturalHeight
+            };
+        }
+        
+        // Check for canvas (charts, diagrams)
+        const canvas = element.tagName === 'CANVAS' ? element : element.querySelector('canvas');
+        if (canvas) {
+            return {
+                type: 'canvas',
+                element: canvas,
+                dataUrl: canvas.toDataURL('image/png'),
+                width: canvas.width,
+                height: canvas.height
+            };
+        }
+        
+        // Check for SVG (diagrams, icons)
+        const svg = element.tagName === 'SVG' ? element : element.querySelector('svg');
+        if (svg) {
+            return {
+                type: 'svg',
+                element: svg,
+                outerHTML: svg.outerHTML,
+                width: svg.width.baseVal.value,
+                height: svg.height.baseVal.value
+            };
+        }
+    } catch (error) {
+        console.error('Error detecting visual content:', error);
+    }
+    
+    return null;
+}
+
 export function detectContentType(text, selection, contextTypeSetter) {
     // Handle empty text
     const cleanText = text.trim();
@@ -19,7 +73,14 @@ export function detectContentType(text, selection, contextTypeSetter) {
         question: 0,
         term: 0,
         foreign: 0,
-        paragraph: 0
+        paragraph: 0,
+        sql: 0,
+        json: 0,
+        regex: 0,
+        url: 0,
+        date: 0,
+        email: 0,
+        image: 0
     };
 
     // Add confidence based on HTML context
@@ -39,6 +100,17 @@ export function detectContentType(text, selection, contextTypeSetter) {
     scores.term += scoreTermConfidence(cleanText);
     scores.foreign += scoreForeignLanguage(cleanText);
     scores.paragraph += scoreParagraphConfidence(cleanText);
+    scores.sql += scoreSQLConfidence(cleanText);
+    scores.json += scoreJSONConfidence(cleanText);
+    scores.regex += scoreRegexConfidence(cleanText);
+    scores.url += scoreURLConfidence(cleanText);
+    scores.date += scoreDateConfidence(cleanText);
+    scores.email += scoreEmailConfidence(cleanText);
+    
+    // Check for image/visual selection
+    if (selection && selection.rangeCount > 0) {
+        scores.image += scoreImageSelection(selection);
+    }
 
     // Contextual adjustments to reduce false positives
     if (scores.code > 0 && scores.math > 0) {

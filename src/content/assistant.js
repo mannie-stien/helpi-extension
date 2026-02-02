@@ -1,6 +1,9 @@
-import { callTogetherAPI } from "./callTogetherAPI.js";
-import { detectContentType } from "./detectContext.js";
+import { callTogetherAPI, callAPI } from "./callTogetherAPI.js";
+import { detectContentType, detectVisualContent } from "./detectContext.js";
 import { injectStyles } from "./styles.js";
+import { KeyboardShortcutsManager } from "./keyboardShortcuts.js";
+import { ConversationManager } from "./conversationManager.js";
+import { handleVisualSelection, getVisualContentActions } from "./visualContentHandler.js";
 
 export class Assistant {
   constructor() {
@@ -10,7 +13,13 @@ export class Assistant {
     this.currentSelection = "";
     this.apiEndpoint = "https://api.together.xyz/inference";
     this.isProcessing = false;
-    this.contextType = ""; // Stores detected content type
+    this.contextType = "";
+    this.conversationManager = new ConversationManager();
+    this.keyboardShortcuts = null;
+    this.lastError = null;
+    this.retryCount = 0;
+    this.maxRetries = 2;
+    this.visualContent = null;
   }
 
   showButton() {
@@ -35,16 +44,49 @@ export class Assistant {
   async init() {
     if (this.initialized) return;
 
-    injectStyles();
-    this.createTooltip();
-    this.setupSelectionListener();
-    this.initialized = true;
+    try {
+      injectStyles();
+      this.createTooltip();
+      this.setupSelectionListener();
+      
+      // Initialize keyboard shortcuts
+      this.keyboardShortcuts = new KeyboardShortcutsManager(this);
+      this.keyboardShortcuts.init();
+      
+      // Setup command listeners
+      this.setupCommandListeners();
+      
+      this.initialized = true;
 
-    // Load initial state
-    const { showAssistant } = await chrome.storage.local.get(["showAssistant"]);
-    if (showAssistant !== false) {
-      this.showButton();
+      // Load initial state
+      const { showAssistant } = await chrome.storage.local.get(["showAssistant"]);
+      if (showAssistant !== false) {
+        this.showButton();
+      }
+    } catch (error) {
+      console.error('Failed to initialize assistant:', error);
+      this.lastError = error;
     }
+  }
+
+  setupCommandListeners() {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.type === 'COMMAND') {
+        switch (message.command) {
+          case 'toggle-assistant':
+            this.toggleAssistant();
+            break;
+          case 'quick-explain':
+            if (this.currentSelection) this.handleExplain();
+            break;
+          case 'summarize-page':
+            this.summarizePage();
+            break;
+        }
+        sendResponse({ success: true });
+      }
+      return true;
+    });
   }
 
   /**
@@ -56,11 +98,15 @@ export class Assistant {
     this.tooltip.innerHTML = `
       <div class="tooltip-header">
         <span>HelpI</span>
-        <button class="close-tooltip" aria-label="Close">&times;</button>
+        <div class="header-actions">
+          <button class="history-btn" aria-label="History" title="View History">📜</button>
+          <button class="close-tooltip" aria-label="Close">&times;</button>
+        </div>
       </div>
       <div class="tooltip-content"></div>
       <div class="tooltip-footer">
         <button class="summarize-btn">Summarize Page</button>
+        <button class="history-btn-footer">History</button>
       </div>
     `;
 
@@ -76,6 +122,15 @@ export class Assistant {
       .addEventListener("click", (e) => {
         e.stopPropagation();
         this.summarizePage();
+      });
+
+    this.tooltip
+      .querySelectorAll(".history-btn, .history-btn-footer")
+      .forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.showHistory();
+        });
       });
 
     document.body.appendChild(this.tooltip);
@@ -111,8 +166,14 @@ export class Assistant {
       const selection = window.getSelection();
       if (selection && selection.toString().trim().length > 0) {
         this.currentSelection = selection.toString().trim();
+        
+        // Check for visual content
+        this.visualContent = detectVisualContent(selection);
+        
+        // Start new conversation on new selection
         detectContentType(this.currentSelection, selection, (type) => {
-          this.contextType = type;
+          this.contextType = this.visualContent ? 'image' : type;
+          this.conversationManager.startConversation(this.currentSelection, this.contextType);
           this.showTooltipNearSelection(selection);
         });
       } else {
@@ -154,7 +215,19 @@ export class Assistant {
    * Generate context-aware buttons based on detected content type
    */
   getContextButtons() {
-  const buttonConfigs = {
+    const hasConversation = this.conversationManager.hasActiveConversation() && 
+                           this.conversationManager.getCurrentConversation()?.exchanges.length > 0;
+    
+    // Handle visual content
+    if (this.visualContent) {
+      const visualActions = getVisualContentActions(this.visualContent);
+      visualActions.push({ class: 'open-sidepanel-btn', text: 'Open in Side Panel' });
+      return visualActions.map(btn => 
+        `<button class="${btn.class}">${btn.text}</button>`
+      ).join('');
+    }
+    
+    const buttonConfigs = {
     code: [
       { class: 'explain-code-btn', text: 'Explain Code' },
       { class: 'improve-code-btn', text: 'Improve Code' },
@@ -193,6 +266,15 @@ export class Assistant {
   
   // Add Ask AI button to all contexts
   buttons.push({ class: 'ask-btn', text: 'Ask AI' });
+  
+  // Add Follow-up button if conversation exists
+  if (this.conversationManager.hasActiveConversation() && 
+      this.conversationManager.getCurrentConversation()?.exchanges.length > 0) {
+    buttons.push({ class: 'followup-btn', text: 'Follow-up' });
+  }
+  
+  // Add Side Panel button
+  buttons.push({ class: 'open-sidepanel-btn', text: 'Side Panel' });
 
   // Generate HTML
   return buttons.map(btn => 
@@ -216,6 +298,14 @@ export class Assistant {
       '.define-btn': () => this.handleDefine(),
       '.translate-btn': () => this.handleTranslate(),
       '.ask-btn': () => this.handleAsk(),
+      '.followup-btn': () => this.handleFollowUp(),
+      '.open-sidepanel-btn': () => this.openSidePanel(),
+      
+      // Visual content handlers
+      '.describe-visual-btn': () => this.handleDescribeVisual(),
+      '.analyze-visual-btn': () => this.handleAnalyzeVisual(),
+      '.extract-text-btn': () => this.handleExtractText(),
+      '.explain-chart-btn': () => this.handleExplainChart(),
       
       // Context-specific buttons
       '.explain-code-btn': () => this.handleExplainCode(),
@@ -277,11 +367,9 @@ export class Assistant {
     </div>
   `;
 
-    // Focus the input immediately
     const askInput = content.querySelector(".ask-input");
     askInput.focus();
 
-    // Prevent tooltip closing when clicking in textarea
     askInput.addEventListener("mousedown", (e) => {
       e.stopPropagation();
     });
@@ -299,7 +387,46 @@ export class Assistant {
         if (!question) return;
 
         const prompt = `Question: ${question}\n\nContext: "${this.currentSelection}"\n\nPlease answer the question based on the provided context.`;
-        await this.processApiRequest(prompt);
+        await this.processApiRequest(prompt, 'ask');
+      });
+  }
+
+  async handleFollowUp() {
+    if (this.isProcessing) return;
+
+    const content = this.tooltip.querySelector(".tooltip-content");
+    content.innerHTML = `
+    <div class="ask-form">
+      <p>Follow-up question:</p>
+      <textarea class="ask-input" placeholder="Continue the conversation..." rows="3"></textarea>
+      <div class="ask-actions">
+        <button class="cancel-ask">Cancel</button>
+        <button class="submit-ask">Submit</button>
+      </div>
+    </div>
+  `;
+
+    const askInput = content.querySelector(".ask-input");
+    askInput.focus();
+
+    askInput.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+    });
+
+    content.querySelector(".cancel-ask").addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.showTooltipNearSelection(window.getSelection());
+    });
+
+    content
+      .querySelector(".submit-ask")
+      .addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const question = askInput.value.trim();
+        if (!question) return;
+
+        const contextualPrompt = this.conversationManager.buildContextualPrompt(question);
+        await this.processApiRequest(contextualPrompt, 'followup');
       });
   }
 
@@ -389,19 +516,173 @@ export class Assistant {
   /**
    * Process API request with error handling and loading states
    */
-  async processApiRequest(prompt) {
+  async processApiRequest(prompt, action = 'general') {
     if (this.isProcessing) return;
 
     this.isProcessing = true;
     this.showLoading();
+    this.retryCount = 0;
 
     try {
-      const response = await callTogetherAPI(prompt);
+      const response = await callAPI(prompt);
+      
+      // Add to conversation history
+      this.conversationManager.addExchange(prompt, response, action);
+      
       this.showResponse(response);
+      this.lastError = null;
     } catch (error) {
+      this.lastError = error;
       this.showError(error.message);
     } finally {
       this.isProcessing = false;
+    }
+  }
+
+  async showHistory() {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'getConversationHistory',
+        limit: 20
+      });
+
+      if (!response?.success) {
+        this.showError('Failed to load history');
+        return;
+      }
+
+      const content = this.tooltip.querySelector(".tooltip-content");
+      const history = response.history || [];
+
+      if (history.length === 0) {
+        content.innerHTML = `
+          <div class="history-view">
+            <h3>Conversation History</h3>
+            <p style="color: #666; text-align: center; padding: 20px;">No history yet</p>
+            <button class="back-btn">Back</button>
+          </div>
+        `;
+      } else {
+        const historyHTML = history.map((conv, idx) => `
+          <div class="history-item" data-index="${idx}">
+            <div class="history-header">
+              <strong>${new Date(conv.timestamp).toLocaleString()}</strong>
+              <span class="history-provider">${conv.provider || 'together'}</span>
+            </div>
+            <div class="history-prompt">${conv.prompt.substring(0, 100)}${conv.prompt.length > 100 ? '...' : ''}</div>
+          </div>
+        `).join('');
+
+        content.innerHTML = `
+          <div class="history-view">
+            <h3>Recent Conversations</h3>
+            <div class="history-list">${historyHTML}</div>
+            <div class="history-actions">
+              <button class="clear-history-btn">Clear History</button>
+              <button class="back-btn">Back</button>
+            </div>
+          </div>
+        `;
+
+        content.querySelectorAll('.history-item').forEach((item, idx) => {
+          item.addEventListener('click', () => {
+            const conv = history[idx];
+            this.showHistoryDetail(conv);
+          });
+        });
+
+        content.querySelector('.clear-history-btn')?.addEventListener('click', async () => {
+          if (confirm('Clear all conversation history?')) {
+            await chrome.runtime.sendMessage({ action: 'clearHistory' });
+            this.showHistory();
+          }
+        });
+      }
+
+      content.querySelector('.back-btn')?.addEventListener('click', () => {
+        if (this.currentSelection) {
+          this.showTooltipNearSelection(window.getSelection());
+        } else {
+          this.hideTooltip();
+        }
+      });
+
+      this.tooltip.classList.add('visible');
+    } catch (error) {
+      console.error('Failed to show history:', error);
+      this.showError('Failed to load history');
+    }
+  }
+
+  showHistoryDetail(conversation) {
+    const content = this.tooltip.querySelector(".tooltip-content");
+    content.innerHTML = `
+      <div class="history-detail">
+        <h3>Conversation Detail</h3>
+        <div class="detail-meta">
+          <div><strong>Date:</strong> ${new Date(conversation.timestamp).toLocaleString()}</div>
+          <div><strong>Provider:</strong> ${conversation.provider || 'together'}</div>
+          <div><strong>Page:</strong> ${conversation.pageTitle || 'Unknown'}</div>
+        </div>
+        <div class="detail-content">
+          <h4>Prompt:</h4>
+          <p>${conversation.prompt}</p>
+          <h4>Response:</h4>
+          <p>${conversation.response}</p>
+        </div>
+        <button class="back-to-history-btn">Back to History</button>
+      </div>
+    `;
+
+    content.querySelector('.back-to-history-btn')?.addEventListener('click', () => {
+      this.showHistory();
+    });
+  }
+
+  /** Handle visual content actions */
+  async handleDescribeVisual() {
+    if (!this.visualContent) return;
+    const prompt = await handleVisualSelection(this.visualContent, this);
+    await this.processApiRequest(prompt, 'describe-visual');
+  }
+
+  async handleAnalyzeVisual() {
+    if (!this.visualContent) return;
+    const prompt = await handleVisualSelection(this.visualContent, this);
+    const enhancedPrompt = `${prompt}\n\nPlease provide a detailed analysis of this visual content.`;
+    await this.processApiRequest(enhancedPrompt, 'analyze-visual');
+  }
+
+  async handleExtractText() {
+    if (!this.visualContent || this.visualContent.type !== 'image') return;
+    this.showError('OCR text extraction is not yet implemented. This feature requires integration with an OCR service like Google Vision API or Tesseract.js.');
+  }
+
+  async handleExplainChart() {
+    if (!this.visualContent) return;
+    const prompt = await handleVisualSelection(this.visualContent, this);
+    const enhancedPrompt = `${prompt}\n\nPlease explain what type of chart or diagram this is and what insights can be derived from it.`;
+    await this.processApiRequest(enhancedPrompt, 'explain-chart');
+  }
+
+  /** Open side panel */
+  async openSidePanel() {
+    try {
+      // Open side panel
+      await chrome.sidePanel.open({ windowId: (await chrome.windows.getCurrent()).id });
+      
+      // Send context to side panel
+      if (this.currentSelection) {
+        await chrome.runtime.sendMessage({
+          type: 'SELECTION_CONTEXT',
+          text: this.currentSelection,
+          contextType: this.contextType,
+          visualContent: this.visualContent
+        });
+      }
+    } catch (error) {
+      console.error('Failed to open side panel:', error);
+      this.showError('Failed to open side panel. Make sure you have the latest version of Chrome.');
     }
   }
 
@@ -444,11 +725,26 @@ export class Assistant {
    */
   showError(message) {
     const content = this.tooltip.querySelector(".tooltip-content");
+    const canRetry = this.retryCount < this.maxRetries;
+    
     content.innerHTML = `
       <div style="color: #d32f2f; background: #fde8e8; padding: 12px; border-radius: 8px;">
         <p><strong>Error:</strong> ${message}</p>
+        ${canRetry ? '<button class="retry-btn" style="margin-top: 8px;">Retry</button>' : ''}
       </div>
     `;
+
+    if (canRetry) {
+      content.querySelector('.retry-btn')?.addEventListener('click', () => {
+        this.retryCount++;
+        if (this.lastError && this.conversationManager.hasActiveConversation()) {
+          const lastExchange = this.conversationManager.getCurrentConversation()?.exchanges.slice(-1)[0];
+          if (lastExchange) {
+            this.processApiRequest(lastExchange.prompt, lastExchange.action);
+          }
+        }
+      });
+    }
   }
 
   /**
@@ -521,8 +817,18 @@ export class Assistant {
     });
 
     content.querySelector(".new-action-btn").addEventListener("click", () => {
-      // Reset to show selection buttons
       this.showTooltipNearSelection(window.getSelection());
     });
+  }
+
+  destroy() {
+    if (this.tooltip) {
+      this.tooltip.remove();
+    }
+    if (this.keyboardShortcuts) {
+      this.keyboardShortcuts.disable();
+    }
+    this.initialized = false;
+    this.visualContent = null;
   }
 }

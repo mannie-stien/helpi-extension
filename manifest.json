@@ -10,8 +10,13 @@
     "48": "/assets/icons/icon.png",
     "128": "/assets/icons/icon.png"
   },
-  "permissions": ["activeTab", "storage"],
-  "host_permissions": ["https://api.together.xyz/"],
+  "permissions": ["activeTab", "storage", "sidePanel", "commands"],
+  "host_permissions": [
+    "https://api.together.xyz/*",
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
   "background": {
     "service_worker": "src/background/background.js",
     "type": "module"
@@ -24,6 +29,9 @@
       "48": "/assets/icons/icon.png",
       "128": "/assets/icons/icon.png"
     }
+  },
+  "side_panel": {
+    "default_path": "src/sidepanel/sidepanel.html"
   },
   "content_scripts": [
     {
@@ -39,15 +47,45 @@
     {
       "resources": [
         "src/content/assistant.js",
+        "src/content/callTogetherAPI.js",
+        "src/content/detectContext.js",
+        "src/content/styles.js",
+        "src/content/apiProviders.js",
+        "src/content/keyboardShortcuts.js",
+        "src/content/conversationManager.js",
+        "src/content/visualContentHandler.js",
+        "src/sidepanel/sidepanel.html",
+        "src/sidepanel/sidepanel.css",
+        "src/sidepanel/sidepanel.js",
         "dist/output.css",
         "assets/fonts/*",
         "assets/icons/*",
-        "assets/store/*",
-        "src/content/styles.js",
-        "src/content/detectContext.js",
-        "src/content/callTogetherAPI.js"
+        "assets/store/*"
       ],
       "matches": ["<all_urls>"]
     }
-  ]
+  ],
+  "commands": {
+    "toggle-assistant": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+H",
+        "mac": "Command+Shift+H"
+      },
+      "description": "Toggle Helpi assistant"
+    },
+    "quick-explain": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E",
+        "mac": "Command+Shift+E"
+      },
+      "description": "Explain selected text"
+    },
+    "summarize-page": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Summarize current page"
+    }
+  }
 }
