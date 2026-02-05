@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Helpi - Side Panel</title>
+    <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+    <div class="sidepanel-container">
+        <!-- Header -->
+        <div class="sidepanel-header">
+            <div class="header-title">
+                <h1>Helpi Assistant</h1>
+                <span class="status-indicator" id="statusIndicator">●</span>
+            </div>
+            <div class="header-actions">
+                <button id="newConversationBtn" class="icon-btn" title="New Conversation">
+                    <span>➕</span>
+                </button>
+                <button id="settingsBtn" class="icon-btn" title="Settings">
+                    <span>⚙️</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Conversation Area -->
+        <div class="conversation-area" id="conversationArea">
+            <div class="welcome-message">
+                <h2>Welcome to Helpi!</h2>
+                <p>Select text on any webpage to get started, or ask a question below.</p>
+                <div class="quick-actions">
+                    <button class="quick-action-btn" data-action="summarize">📄 Summarize Page</button>
+                    <button class="quick-action-btn" data-action="history">📜 View History</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-area">
+            <div class="context-info" id="contextInfo" style="display: none;">
+                <span class="context-label">Context:</span>
+                <span class="context-text" id="contextText"></span>
+                <button class="clear-context-btn" id="clearContextBtn">✕</button>
+            </div>
+            <div class="input-container">
+                <textarea 
+                    id="messageInput" 
+                    placeholder="Ask anything or select text on the page..."
+                    rows="3"
+                ></textarea>
+                <div class="input-actions">
+                    <select id="providerSelect" class="provider-select">
+                        <option value="together">Together.ai</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="anthropic">Anthropic</option>
+                        <option value="google">Google AI</option>
+                    </select>
+                    <button id="sendBtn" class="send-btn" disabled>
+                        <span>Send</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="sidepanel.js"></script>
+</body>
+</html>
