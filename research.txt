@@ -1,0 +1,544 @@
+STAGE 4: MINIMUM DATA SCHEMA DESIGN
+
+PAIN #1: FEED WASTAGE AND THEFT
+
+SECTION 1: CORE DECISION
+Help the farmer detect feed consumption anomalies within days, not weeks, so they can confront the problem with numbers before significant money is lost.
+
+SECTION 2: REQUIRED DATA ELEMENTS
+#Field NameTypeFrequencyWho RecordsWhy It MattersIf Missing1DateDateDailyOwner or farmhandAnchors consumption to time; enables day-over-day comparisonCan't detect when anomaly started2Bags/scoops used todayNumberDailyOwner or farmhandOnly direct measure of feed consumptionEntire schema collapses — this is the core signal3Current flock countNumberPer batch start; update after any sale or major mortality eventOwnerConsumption per bird only meaningful against flock sizeCan't normalize usage; can't compare batches fairly4Batch start dateDateOnce per batchOwnerEnables age-based expected consumption benchmarksCan't know if consumption is appropriate for bird age5Feed delivery: quantity receivedNumber (bags)Per deliveryOwnerEnables running inventory: bought minus used = should haveWithout this, no way to verify if bags are disappearing6Feed delivery: date receivedDatePer deliveryOwnerPairs with usage to calculate days-per-bag burn rateCan't tell if pace of consumption changed after delivery
+Total fields: 6
+Fields deliberately excluded:
+
+Feed brand/type: nice to have, adds complexity, not needed for theft/waste detection
+Feed price per bag: useful for cost analysis but adds friction; not core to anomaly detection
+Specific cause of excess (theft vs overfeeding vs spillage): can't know from data alone, farmer investigates after anomaly detected
+Worker name: accusatory before pattern confirmed; creates social friction
+
+
+SECTION 3: DATA COLLECTION REALITY CHECK
+Daily recording simulation (no delivery day):
+StepActionTime1Write today's date5 seconds2Count or estimate bags/scoops used today30 seconds3Write the number next to the date5 secondsTotal~45 seconds/day
+Delivery day recording (additional steps):
+StepActionTime1Write date of delivery5 seconds2Count bags received, write number15 secondsAdditional total~20 seconds extra
+Batch start recording (once every 6-8 weeks for broilers):
+StepActionTime1Write batch start date5 seconds2Write starting flock count5 secondsOne-time total~10 seconds
+Grand total daily burden: Under 1 minute on normal days. Under 2 minutes on delivery days.
+Schema passes the 5-minute test comfortably.
+Reduction test: Could we drop delivery recording (fields 5 and 6)?
+
+Without it, farmer tracks usage but cannot compute running inventory
+Losing the inventory signal means losing the theft detection mechanism entirely
+Fields 5 and 6 are essential. They stay.
+
+Unit decision — bags vs. scoops:
+
+Bags are coarser but unambiguous (farmer counts bags; worker cannot manipulate count)
+Scoops are more sensitive but require trust in worker's honesty
+Recommendation: bags as primary unit; scoops as optional secondary
+Unknown: whether farmers in Ghana measure in consistent scoop sizes across farms — field research needed
+
+
+SECTION 4: DERIVED SIGNALS
+SignalCalculationMoney LinkDaily consumption rateBags used today ÷ current flock countEstablishes "normal" baseline per bird; any deviation is visible within 2-3 daysRunning inventoryTotal bags received (all deliveries) − total bags used (all days) = expected bags remainingIf expected inventory ≠ physical count, gap = theft or unrecorded spillageConsumption vs. prior weekThis week's total usage ÷ last week's total usageEarly warning: if ratio exceeds 1.1-1.2, something has changedDays-per-bag rateDays elapsed since last delivery ÷ bags consumed in that periodIf rate shortens unexpectedly, consumption has increased — detect within 3-4 days not 3-4 weeksBatch-over-batch comparisonAverage daily usage (this batch) vs. average daily usage (previous batch at same age)Reveals if current batch is systematically more expensive than prior — could be overfeeding, theft, or flock healthFeed cost per surviving bird(Total bags used × price per bag) ÷ current flock countDirect profit signal; farmer can compare across batches or vs. other farmers' benchmarks
+Most financially important signals:
+
+Running inventory gap → catches theft fastest
+Days-per-bag shortening → catches overfeeding before it compounds
+Batch-over-batch comparison → enables systematic learning
+
+Signals that require NO additional data fields beyond the 6 listed above.
+
+SECTION 5: EDGE CASES
+Multiple poultry houses:
+
+Core schema must be recorded per house, not per farm
+Minimum addition: a house identifier (House A / House B / "big shed" / "small shed")
+One extra field, written once per entry: low burden
+Critical because theft or overfeeding in one house is masked by correct usage in another if combined
+Unknown: how many small-medium Ghana farms have 2+ separate feed stores vs. one central store — this determines whether per-house tracking is necessary or optional
+
+Farm size differences:
+
+Small farms (300-500 birds): likely measuring in scoops not bags; bags last multiple days; adjust frequency to "bags opened this week" rather than daily if daily is too coarse
+Medium farms (1,500-5,000 birds): bags consumed daily; daily recording natural and meaningful
+Schema itself doesn't change; only the unit and frequency of the number field
+
+Layers vs. broilers:
+
+Broilers: consumption increases with age (day 1 birds eat far less than week 5 birds); comparison must be age-normalized
+Layers: consumption is relatively stable per bird once laying begins; simpler to track
+Schema is identical for both; interpretation of anomalies differs
+For broilers: week-over-week comparison is more meaningful than day-over-day because age-driven growth distorts daily comparison
+Unknown: whether Ghanaian small-layer farmers track feed differently from broiler farmers in practice — needs field verification
+
+Shared responsibility between owner and farmhand:
+
+Farmhand most likely to record daily usage (they handle the feed)
+Owner most likely to record deliveries (they purchase and receive)
+Risk: farmhand who is stealing will under-record usage to mask the gap
+Mitigation: owner should periodically count physical bags on hand and compare to expected inventory; this cross-check requires owner involvement at least weekly
+Schema must specify that owner independently verifies inventory count once per week — not daily, not complex, just a physical count
+This is a behavior requirement, not a data field
+
+Farmer literacy and numeracy edge case:
+
+If farmer cannot calculate daily average mentally, the consumption comparison signal fails
+Minimum viable numeracy required: subtraction and rough division
+If below this threshold, schema still works for simple "do I have fewer bags than expected?" check
+Pattern comparison signals may need external help (trusted person, service agent) to interpret
+
+
+
+PAIN #2: MISSING THE OPTIMAL SELLING WINDOW
+
+SECTION 1: CORE DECISION
+Help the farmer know exactly how old their birds are today and whether current market price justifies selling now or waiting, so they stop selling by gut feeling and start selling by numbers.
+
+SECTION 2: REQUIRED DATA ELEMENTS
+BROILERS:
+#Field NameTypeFrequencyWho RecordsWhy It MattersIf Missing1Batch IDShort text (Batch 1, Batch 2 / "March batch")Once per batchOwnerSeparates batches for comparison; prevents confusion across cyclesAll records blur together; can't compare batch performance2Batch start date (chicks arrival)DateOnce per batchOwnerFoundation of age calculation; every other broiler insight depends on thisCan't calculate age; can't know selling window; entire schema fails3Starting bird countNumberOnce per batchOwnerRequired to calculate mortality rate and normalize feed/revenue per birdCan't compute any per-bird metric4Target sell dateDateOnce per batch (set at start)OwnerCreates a planning anchor; triggers farmer to think ahead not reactFarmer reverts to selling reactively by feel5Market price heard todayNumber (GH₵ per kg)When heard (not daily) — typically 2-3 times per weekOwnerBuilds price reference history; enables comparison of today's offer vs. recent rangeFarmer has no baseline; can't evaluate if buyer's offer is good or low6Price sourceShort text (buyer name or "WhatsApp group")Same event as field 5OwnerIdentifies if price variation is source-specific or market-wideCan't distinguish one buyer manipulating price vs. genuine market move7Actual sell dateDateOnce per batch at saleOwnerEnables post-batch analysis: sold early/late vs. target?Can't learn from timing mistakes; no improvement over batches8Actual sell price (GH₵/kg)NumberOnce per batch at saleOwnerPairs with actual sell date to calculate timing qualityCan't evaluate if selling decision was right or wrong
+Total fields: 8 (but only 2 recorded daily; most are once-per-batch or event-driven)
+LAYERS (different timing, same logic):
+#Field NameTypeFrequencyWho RecordsWhy It MattersIf Missing1Flock start dateDateOnce per flock cycleOwnerAnchors all age calculations for the 72-96 week cycleCan't know how old birds are; can't plan culling2Weekly egg count (total crates)NumberWeekly (not daily — reduces burden)Owner or farmhandProduction rate trend reveals decline, which triggers culling decisionNo visibility into production decline; cull decision made blind3Culling price heardNumber (GH₵/bird)When heard (monthly or when considering culling)OwnerCaptures price seasonality; prevents desperate sale in low-price periodSells hens at wrong time in culling price cycle4Actual cull dateDateOnce per cull eventOwnerEnables reflection: culled at right time vs. optimal?Can't learn from timing; repeats mistakes in next cycle
+Fields deliberately excluded:
+
+Daily egg count: weekly is sufficient for trend detection; daily adds 365 entries/year with marginal extra insight
+Individual bird weights (broilers): too operationally complex; flock-level average estimate sufficient
+Feed cost at time of sale: valuable but derivable from Pain #1 schema if already maintained; don't duplicate
+Egg price: important for layers but secondary to production rate for culling decision; can be added later
+
+
+SECTION 3: DATA COLLECTION REALITY CHECK
+BROILERS — Daily burden:
+StepActionTime1Nothing — no daily recording required unless price heard0 secondsTotal most days0 seconds
+When price is heard (2-3 times/week):
+StepActionTime1Write date5 seconds2Write price and source ("GH₵40, Kofi buyer")15 secondsTotal~20 seconds
+Batch start (once per cycle):
+StepActionTime1Write batch ID, start date, bird count, target sell date45 secondsTotal~45 seconds
+Batch end (once per cycle):
+StepActionTime1Write actual sell date and actual price per kg20 secondsTotal~20 seconds
+Grand total weekly burden (broilers): Under 2 minutes/week.
+LAYERS — Weekly burden:
+StepActionTime1Write week number or date5 seconds2Write total crates this week10 secondsTotal~15 seconds/week
+Schema passes the 5-minute test easily for both farm types.
+Reduction test: Could we drop price source (field 6)?
+
+Useful for distinguishing one manipulative buyer from market reality
+But adds complexity; farmer may not always know source clearly
+It is a borderline field — record only if farmer naturally knows it; don't force it
+Verdict: optional, not required
+
+
+SECTION 4: DERIVED SIGNALS
+BROILERS:
+SignalCalculationMoney LinkBird age todayToday's date − batch start dateFarmer always knows exactly how old birds are without calculationDays to target sellTarget sell date − today's dateCreates countdown; farmer plans buyer outreach in advance not last minuteRecent price rangeHighest and lowest price recorded in past 10-14 daysFarmer can evaluate if today's offer is top, middle, or bottom of recent rangePrice trend directionCompare this week's average vs. last week's averageIs market rising or falling? Informs wait-or-sell decisionDays-past-targetToday's date − target sell date (if not yet sold)Quantifies how many extra feed days being spent; farmer can calculate cost of delayFeed cost of waitingDays past target × daily feed cost (from Pain #1 schema)Direct cedis cost of "waiting one more week" — makes the hesitation expensive in real numbersBatch timing qualityActual sell date − target sell date (positive = late; negative = early)Over multiple batches shows if farmer consistently sells early or late; enables correctionPrice realized vs. rangeActual sell price vs. min-max price range recorded that weekDid farmer sell at a good moment within the week's volatility?
+LAYERS:
+SignalCalculationMoney LinkProduction rate this weekWeekly crates ÷ flock count × 100 = %Core metric for culling decision triggerProduction trendThis week's rate vs. 4 weeks agoIs decline accelerating? Key to culling timingFlock ageToday − flock start date (in weeks)Contextualizes production rate against expected lifecycleWeeks of declineCount consecutive weeks with falling rateDistinguishes temporary dip from structural declineSeasonal culling price contextCompare current culling price vs. prices heard in prior monthsShould I sell hens now or wait for better culling price?
+Most financially important signals:
+
+Days-to-target + feed cost of waiting → single most powerful sell/wait calculation
+Price range context → prevents panic selling at low price
+Production trend (layers) → triggers culling decision at right time not desperate time
+
+
+SECTION 5: EDGE CASES
+Multiple batches running simultaneously (broilers):
+
+Common on medium farms: stagger batches for continuous revenue
+Batch ID field becomes critical — must be unambiguous ("March batch", "April batch" or "Batch 7")
+Price recording is shared across batches (market price applies to all), so recorded once per event
+Sell date and sell price recorded separately per batch
+Schema handles this without structural change; just requires clear batch labeling
+
+Multiple poultry houses:
+
+If each house has different batch start dates, treat each house as a separate batch with its own batch ID
+Price data is farm-level (market price is same regardless of house)
+No additional fields needed; just disciplined use of batch ID
+
+Farm size differences:
+
+Small broiler farm (300 birds): batch cycles every 6-8 weeks; low frequency of sell events
+Medium broiler farm (2,000+ birds): may run 2-3 batches simultaneously; batch IDs become critical
+Layer farm (500-2,000 birds): continuous operation; weekly recording is manageable
+
+Layers vs. broilers:
+
+Different schemas needed because different decision cycles
+Broiler: binary decision (sell now vs. wait days/weeks)
+Layer: gradual decision (cull now vs. wait weeks/months)
+Both manageable with the fields listed; do not combine into single schema — creates confusion
+
+Shared responsibility:
+
+Farmhand: unlikely to record price information (doesn't negotiate with buyers)
+Owner: records price when heard, batch dates, and sale events
+Farmhand for layers: can record weekly egg count if trained to count crates
+Risk: farmhand records egg count but farmer never checks it against own observation — data quality degrades
+Unknown: what percentage of Ghanaian small-farm workers can accurately count and record crates — needs verification
+
+Connectivity edge case:
+
+Price heard verbally (market visit or phone call) — recording requires only pen and paper
+WhatsApp price announcements — farmer writes it down, doesn't need to type into any system
+No connectivity dependency in this schema
+
+
+
+PAIN #3: SUPPLIER PAYMENT CONFUSION AND CASH FLOW GAPS
+
+SECTION 1: CORE DECISION
+Help the farmer know exactly what they owe to each supplier, when it is due, and what payments have been made, so that every conversation with a supplier starts from agreed facts, not competing memories.
+
+SECTION 2: REQUIRED DATA ELEMENTS
+#Field NameTypeFrequencyWho RecordsWhy It MattersIf Missing1Supplier nameShort textPer transactionOwnerSeparates debts by supplier; prevents cross-supplier confusionAll debts blur together; can't answer "what do I owe Kofi specifically?"2Transaction dateDatePer transactionOwnerTime-stamps every purchase and payment; enables dispute resolutionCan't sequence events; "I paid before that delivery" claim unverifiable3Transaction typeYes/No or single letter (P = purchase, M = payment made)Per transactionOwnerDistinguishes money going out (payment) from obligation created (purchase on credit)Running balance calculation impossible4Amount (GH₵)NumberPer transactionOwnerCore of balance calculationNothing can be calculated without this5Credit or cashYes/No (C or K)Per purchase onlyOwnerOnly credit purchases create a debt obligation; cash purchases close immediatelyCounts cash purchases as debts, overstates what is owed6Payment due dateDatePer credit purchase onlyOwnerTriggers awareness before deadline, not after supplier calls angryWithout this, farmer only knows they owe money, not when it must be paid
+Total fields: 6
+Running balance derivation (not a field — a calculation):
+
+Balance per supplier = Sum of all purchase amounts (credit only) − Sum of all payments made to that supplier
+Requires no additional fields; derived entirely from fields 1-5
+
+Fields deliberately excluded:
+
+Delivery quantity (bags): tracked in Pain #1 schema; don't duplicate
+Payment method (MoMo vs. cash): useful for dispute evidence but adds complexity; farmer can note MoMo reference number optionally without requiring it
+Invoice number: too formal for this context; suppliers may not give invoices
+Outstanding balance as a separate field: it's derived, not entered — entering it separately creates reconciliation errors
+Penalty/interest: edge case; not part of minimum schema
+
+
+SECTION 3: DATA COLLECTION REALITY CHECK
+At time of credit purchase:
+StepActionTime1Write supplier name and date10 seconds2Write "P" (purchase) and amount in GH₵10 seconds3Write "C" (credit) and due date10 secondsTotal~30 seconds
+At time of payment:
+StepActionTime1Write supplier name and date10 seconds2Write "M" (payment made) and amount in GH₵10 secondsTotal~20 seconds
+Weekly review (check what is due this week):
+StepActionTime1Scan entries with due dates in next 7 days2-3 minutes2Calculate: for each supplier, sum purchases minus payments = balance2-3 minutesTotal~4-5 minutes maximum
+Grand total daily burden: Under 1 minute on transaction days. Under 5 minutes for weekly review.
+Schema passes the 5-minute test.
+Reduction test: Could we drop the due date field (field 6)?
+
+Without it, farmer knows balances but doesn't know urgency
+Loses the cash-flow-planning signal entirely
+The whole point is to anticipate cash demands, not just track history
+Field 6 is essential. Stays.
+
+Reduction test: Could we simplify "transaction type" further?
+
+Instead of P/M, use "+" for money owed and "−" for money paid
+This is more intuitive for low-literacy users
+Verdict: simplify to +/− notation; preserves function, reduces literacy barrier
+
+
+SECTION 4: DERIVED SIGNALS
+SignalCalculationMoney LinkBalance per supplierSum of all (+) credit purchases − Sum of all (−) payments, per supplier nameCan resolve "how much do I owe Kofi?" in seconds, not argumentsTotal outstanding debt (all suppliers)Sum of all supplier balancesFarmer sees full cash obligation picture; prevents month-end shockPayments due this weekFilter all (+) entries with due dates in next 7 daysPlan which payments to make before crisis, not during crisisPayments due this monthFilter all (+) entries with due dates in next 30 daysCash flow planning windowDisputed payment verificationSearch by supplier name + date of claimed paymentIn 20 seconds, farmer can point to specific record vs. supplier claimOldest unpaid balanceFilter unpaid (+) entries sorted by transaction dateIdentifies which supplier has waited longest; prioritize to protect credit relationshipCredit utilization per supplierTotal unpaid balance per supplierIf Kofi has extended GH₵20,000 credit limit and farmer owes GH₵18,500, close to limit — plan aheadPayment pattern over timeDo payments cluster at end of month? After egg sales?Unknown source of insight — field research could reveal whether payment timing patterns predict cash crises
+Most financially important signals:
+
+Balance per supplier → prevents double-payment and dispute losses (GH₵3,000-6,000 per incident)
+Payments due this week → prevents credit cut-off (worth GH₵2,000-4,000/year in premium pricing avoided)
+Total outstanding debt → prevents month-end cash crisis surprises
+
+All derived from 6 fields, zero additional data required.
+
+SECTION 5: EDGE CASES
+Multiple suppliers (common on medium farms):
+
+Schema is designed for this: supplier name field separates all records
+Farmer maintains one running ledger but entries are tagged by supplier
+Practical constraint: if farmer has 5+ suppliers, weekly balance review takes longer
+Unknown: how many concurrent suppliers does the average Ghanaian small-medium poultry farm maintain? Field research needed to size the review burden
+
+Supplier also provides credit for non-feed items (medication, chicks):
+
+Same schema applies: just record the supplier name, amount, and type
+No additional field needed — schema is category-agnostic
+This is a feature of minimalism: the schema doesn't care what was purchased
+
+Partial payments (very common):
+
+Schema handles this naturally: one (+) entry for purchase, multiple (−) entries as payments are made
+Balance recalculates correctly with each entry
+Farmer must be consistent: every partial payment gets its own (−) entry on the date it was made
+
+Spouse or worker making payments on behalf of owner:
+
+High risk: spouse sends MoMo to supplier but farmer doesn't record it
+Leads to "I think my wife paid... I'm not sure" scenario
+Behavioral rule required, not a data field: whoever makes payment must notify owner immediately; owner records it
+Alternative: designate owner as sole payment recorder; spouse must always report payments same day
+Unknown: what percentage of small farm payment errors come from this specific scenario vs. farmer's own poor recording — needs investigation
+
+Cash purchases (no credit created):
+
+Field 5 (credit or cash) handles this: cash = no balance entry required
+However: cash purchases should still be recorded for cost tracking purposes
+The (+) notation for cash is: purchase happened, paid same day, balance = zero immediately
+Temptation to skip recording cash purchases is high — this is a behavioral risk, not a schema gap
+
+Pre-existing disputed balances:
+
+Farmer and supplier already disagree on balance before schema begins
+Schema cannot retroactively resolve old disputes
+Starting point requires farmer and supplier to agree on opening balance
+Unknown: how many farmers would have this obstacle when starting fresh record-keeping — could be significant adoption barrier
+Practical approach: record "opening balance agreed on [date]: GH₵X,000 owed to [Supplier]" as first entry
+
+Supplier using their own book (parallel tracking):
+
+Schema is entirely on farmer's side; supplier keeps their own records
+Goal is not to replace supplier records but to give farmer equal information power
+In dispute: farmer shows their record; supplier shows theirs; they reconcile
+Schema gives farmer a defensible position — currently they have none
+
+
+
+PAIN #4: LABOR COST CREEP
+
+SECTION 1: CORE DECISION
+Help the farmer calculate every worker's earned wages accurately at payment time so that disputes are resolved with records, not memory, and overpayment becomes structurally impossible.
+
+SECTION 2: REQUIRED DATA ELEMENTS
+#Field NameTypeFrequencyWho RecordsWhy It MattersIf Missing1Worker nameShort textOnce at hire; referenced dailyOwnerSeparates each worker's record; prevents cross-worker confusionRecords merge; can't compute wages per person2Agreed daily rate (or monthly rate)Number (GH₵)Once at hire; update if rate changes (with date)OwnerReference point for all wage calculations and dispute resolutionCan't calculate what worker earned; rate disputes unresolvable3Work dateDateDailyOwner or designated recorderLinks attendance to calendar; enables day countCan't count days worked; entire wage calculation fails4AttendanceYes/No (✓ or ✗)DailyOwner or designated recorderCore of wage calculation: days present × daily rate = wages earnedNo basis for any payment calculation5Payment madeNumber (GH₵)Per payment eventOwnerConfirms payment was made and amount; prevents double-payment claimsNo proof of payment; double-payment claims unresolvable6Payment dateDatePer payment eventOwnerTimestamps payment; links to specific pay periodCan't tell which period the payment covers; "I didn't receive last month's pay" claim unverifiable
+Total fields: 6
+For piece-rate workers (egg collectors, casual labor):
+Replace fields 3 and 4 with:
+#Field NameTypeFrequencyWho RecordsWhy It MattersIf Missing3bWork dateDatePer work eventOwnerSame as aboveSame as above4bUnits completed (crates, tasks)NumberPer work eventOwner (verified)Replaces attendance for piece-rate calculationCan't compute piece-rate earnings
+Fields deliberately excluded:
+
+Clock-in/clock-out times: too precise; not relevant at this farm scale
+Reason for absence: emotionally charged; not needed for wage calculation
+Overtime tracking: uncommon at small-medium farm scale; add only if needed
+Worker ID numbers: unnecessary formality for this context
+Tax or deduction fields: not relevant in informal labor context
+Performance rating: outside scope of wage accuracy problem
+
+
+SECTION 3: DATA COLLECTION REALITY CHECK
+Daily attendance recording (single farmhand):
+StepActionTime1Open notebook to attendance page5 seconds2Find today's date row5 seconds3Write ✓ or ✗ for each worker10 seconds per workerTotal (2 workers)~30 seconds
+Daily attendance recording (5 workers, medium farm):
+StepActionTime1-3Same as above × 5 workers~60 secondsTotal~1 minute
+Payment calculation at end of month:
+StepActionTime1Count ✓ marks for worker in current pay period30 seconds2Multiply days × daily rate20 seconds (calculator)3Write payment amount and date10 secondsTotal per worker~1 minuteTotal for 5 workers~5 minutes
+Piece-rate recording (per event):
+StepActionTime1Write date and units (e.g., "45 crates")15 secondsTotal~15 seconds
+Grand total daily burden: Under 1 minute (for attendance). Under 5 minutes on payment day.
+Schema passes the 5-minute test for farms up to 5 workers.
+Above 5 workers: Schema is still valid but weekly payment events take longer. Medium farms with 8-10 workers may approach 10-minute payment calculations. This is acceptable because payment happens weekly or monthly, not daily.
+Reduction test: Could we drop payment date (field 6)?
+
+Without it, farmer records payment amount but not when
+"I paid you last month" claim becomes vague again
+Field 6 is essential. Stays.
+
+Reduction test: Could we drop agreed rate (field 2)?
+
+Without it, attendance record exists but can't calculate wages without asking worker "what was your rate again?"
+Rate dispute is reopened every payment cycle
+Field 2 is essential. Stays.
+
+
+SECTION 4: DERIVED SIGNALS
+SignalCalculationMoney LinkDays worked this periodCount of ✓ marks per worker since last payment dateImmediately resolves "how many days did I work?" disputeWages earned this periodDays worked × agreed daily rateFarmer can state earned amount before worker asks; eliminates negotiationWages owed (unpaid balance)Wages earned − payments already made this periodIf farmer made partial advance, correctly calculates remaining balanceYear-to-date labor cost per workerSum of all payments made to worker since hire or year startShows actual labor cost burden; informs hiring decisionsTotal farm labor cost this monthSum of wages earned across all workersEnables farmer to track labor as % of total costsPayment verificationSearch by worker name + payment dateResolves "you didn't pay me last month" claim in secondsRate change historyAgreed rate has date attached; multiple rates over time show historyResolves "we agreed GH₵18 not GH₵15" disputes with dated evidenceAttendance patternCount of absent days per worker over rolling monthIf one worker absent 8 days out of 26, farmer can see pattern and decide if acceptable
+Most financially important signals:
+
+Days worked + wages earned → eliminates end-of-month calculation disputes (saves GH₵1,000-3,000/year in overpayments)
+Payment verification record → prevents double-payment (saves GH₵400-800 per incident)
+Agreed rate with date → makes rate inflation indefensible (saves GH₵75-125/worker/month)
+
+
+SECTION 5: EDGE CASES
+Mixture of permanent and casual workers:
+
+Schema handles both; casual workers just have fewer entries (only days they work)
+Permanent workers get a ✓ or ✗ every working day
+Casual workers get an entry only on days they come
+No structural change needed
+
+Worker gets paid daily (common for casual labor):
+
+Payment field records same-day payment
+Balance immediately = zero
+Schema still valid; just higher frequency of payment entries
+
+Advance payments requested by worker:
+
+Worker asks for GH₵200 advance on 15th, full salary paid on 30th
+Record: Payment date 15th, Amount GH₵200 (advance)
+Record: Payment date 30th, Amount = salary − GH₵200
+Schema handles this without modification; wages-owed signal shows correct balance at all times
+
+Farmer is absent and family member supervises:
+
+Family member must mark attendance
+Failure point: family member forgets or records incorrectly
+Behavioral requirement: farmer must designate one specific person as backup attendance recorder when away
+This person must be taught the single action: write date + ✓ or ✗ for each worker
+Schema is designed to be teachable to a non-owner in under 5 minutes
+
+Multiple workers with same first name (common in Ghana):
+
+Field 1 (worker name) must include distinguishing detail: "Kwame (driver)" vs "Kwame (farmhand)"
+Or use shortened nickname that is unambiguous on the farm
+Low-tech solution: farmer knows their workers; clarity is behavioral not structural
+
+Farmhand is also part of the family (common on small farms):
+
+Cultural sensitivity: formal attendance tracking of a family member may feel inappropriate
+Schema is still valid but farmer must decide whether to use it for family workers or only hired workers
+Unknown: what percentage of small Ghanaian poultry farms use family-only labor vs. hired workers — this determines how widely Pain #4 actually applies
+
+Worker requests to see their own attendance record:
+
+Positive: if record is accurate and visible to both parties, disputes become less likely because worker can self-monitor
+Negative: if farmer made error and worker sees it, creates confrontation
+Schema doesn't dictate visibility — a behavioral and trust decision for each farm
+Unknown: whether shared visibility reduces or increases disputes in this cultural context — needs field research
+
+
+
+PAIN #5: MORTALITY PATTERN BLINDNESS
+
+SECTION 1: CORE DECISION
+Help the farmer accumulate enough consistent mortality data across batches to identify which supplier, season, or management condition is costing them the most birds, so the next purchasing or husbandry decision is based on evidence not assumption.
+
+SECTION 2: REQUIRED DATA ELEMENTS
+#Field NameTypeFrequencyWho RecordsWhy It MattersIf Missing1Batch IDShort textOnce per batchOwnerLinks all mortality data to a specific batch; enables batch-to-batch comparisonDeaths from different batches merge; no pattern possible2Batch start dateDateOnce per batchOwnerEnables age calculation; enables seasonal comparisonCan't calculate bird age at death; can't compare May vs. November batches3Chick supplier nameShort textOnce per batchOwnerThe single most actionable pattern variable: is one supplier consistently worse?Can't answer the most important question: which supplier should I use?4Starting bird countNumberOnce per batchOwnerRequired to calculate mortality rate; raw deaths are meaningless without thisCan't compute % mortality; can't compare batches with different starting sizes5Deaths todayNumberDailyOwner or farmhandRaw mortality data; accumulates into batch totalNo mortality data; entire schema fails6Bird age today (week number)NumberDaily (but derivable from field 2 — see note below)Auto-calculated if date keptEnables age-pattern detection: is week 2 always worse?Can't identify age-vulnerability windows
+Note on field 6: If batch start date (field 2) and today's date are both known, bird age is a calculation not a recorded field. However, if farmer is recording on paper without a calculator, writing the current week number daily is faster than calculating. Practical decision depends on implementation.
+Total fields: 6 (5 recorded + 1 derivable)
+Fields deliberately excluded:
+
+Cause of death: this is medical/scientific territory; outside scope of this tool
+Medication protocol used: important for pattern detection but requires farmer to record complex protocol names; creates burden and misidentification risk; add only if farmer already tracks protocols simply
+Feed brand: useful but secondary to supplier; added complexity for marginal extra insight
+Weather conditions: too vague; too burdensome; seasonality is captured by batch start date and season calendar
+House/pen number: add only for multi-house farms (see edge cases)
+Cumulative mortality (running total): derivable by addition; not a separate field
+
+
+SECTION 3: DATA COLLECTION REALITY CHECK
+Daily mortality recording:
+StepActionTime1Worker collects dead birds at morning checkAlready happens2Worker tells farmer number of deathsAlready happens3Farmer writes: batch ID + date + number of deaths20 secondsTotal~20 seconds/day
+Batch start recording (once per cycle):
+StepActionTime1Write batch ID, start date, supplier name, bird count45 secondsTotal~45 seconds
+Batch end summary (once per cycle):
+StepActionTime1Add up all daily deaths for the batch2-3 minutes2Calculate: total deaths ÷ starting count × 100 = % mortality30 seconds3Write batch summary: "Batch 7: Akosua supplier, 12% mortality, March-May"20 secondsTotal~3-4 minutes
+Quarterly pattern review:
+StepActionTime1Read batch summaries for last 3-4 batches2 minutes2Group by supplier and note mortality rates2 minutes3Note which months had highest mortality1 minuteTotal~5 minutes, once per quarter
+Grand total daily burden: Under 30 seconds/day. Under 5 minutes at batch end. 5-minute quarterly review.
+Schema passes the 5-minute test easily.
+Critical caveat: The daily recording is simple. The value-creating step is the quarterly pattern review. If farmer never does the review, the data is collected but never used. This is Pain #5's fundamental challenge: the schema is minimal; the behavioral habit of reviewing is harder to instill.
+Reduction test: Could we remove supplier name (field 3)?
+
+This is the single highest-value pattern variable
+Without supplier attribution, farmer accumulates mortality data but cannot answer: "Is Supplier A worse than Supplier B?"
+This single insight is worth GH₵24,000/year if it leads to a supplier switch
+Field 3 is essential and irreducible.
+
+Reduction test: Could we record deaths weekly rather than daily?
+
+Weekly recording would work for pattern detection purposes
+Daily recording gives earlier warning within a batch
+But if daily burden is already 20 seconds, daily is better than weekly
+Unknown: whether Ghanaian farmers are more likely to maintain daily vs. weekly recording habits — needs field research to determine optimal frequency
+
+
+SECTION 4: DERIVED SIGNALS
+SignalCalculationMoney LinkBatch mortality rateTotal deaths in batch ÷ starting bird count × 100Core comparison metric across batchesMortality rate by supplierAverage batch mortality rate for all batches from Supplier A vs. Supplier BHighest value insight: if Supplier A averages 12% and Supplier B averages 8%, switch saves GH₵4,000+/batchMortality rate by seasonAverage batch mortality rate for March-May batches vs. other monthsReveals seasonal pattern; informs preparation and timing of batch startsCumulative batch deathsRunning sum of daily deaths within current batchEnables within-batch warning: "already lost 9% in week 3, last batch was at 6% at this stage"Mortality by age weekGroup daily deaths by week number, find which week has highest averageIdentifies age-vulnerability window; farmer can increase care during that windowBest-performing supplierSupplier with consistently lowest average mortality across 3+ batchesInforms all future purchasing decisionsWorst-performing seasonSeason with consistently highest average mortality across 2+ yearsInforms whether to start batches before or after vulnerable periodMortality trend within batchIs this week's death rate higher or lower than last week's?Early warning that something is changing within a batch
+Most financially important signals:
+
+Mortality rate by supplier → supplier switch decision (GH₵24,000-30,000/year potential)
+Mortality rate by season → seasonal preparation or batch timing shift
+Mortality by age week → concentrated care during vulnerable window
+
+Critical limitation of all signals: They require minimum 3-4 batches before patterns are statistically meaningful. For broilers (6-8 week cycles), this means 5-6 months of consistent recording before first actionable insight. Farmer must record faithfully during this window without seeing value. This is the primary adoption risk for Pain #5.
+
+SECTION 5: EDGE CASES
+Multiple poultry houses:
+
+If different houses have different batches or different suppliers, mortality must be recorded per house
+Add one field: House ID (House A / House B, or "big shed")
+Without it, high mortality in one house is masked by healthy birds in another
+This is the only scenario requiring an additional field beyond the core 6
+
+Multiple batches running simultaneously (medium farms):
+
+Batch ID field handles this: each house-batch combination gets its own ID
+Daily recording: farmer writes death count per batch ID — slightly more complex but manageable
+"Batch 7-HouseA: 3 dead. Batch 8-HouseB: 1 dead." = 30 seconds
+
+Farm size differences:
+
+Small farm (300-500 birds): low absolute death numbers; 0-2 deaths/day typical; recording is trivial
+Medium farm (2,000-5,000 birds): higher absolute numbers; patterns emerge faster (more data); slightly more likely to notice patterns
+Schema identical for both; pattern detection timeline faster for medium farms due to larger sample sizes
+
+Layers vs. broilers:
+
+Broilers: 6-8 week cycle, high importance of age-week patterns
+Layers: 72-96 week cycle, mortality patterns matter but are slower to develop
+For layers, recording deaths weekly rather than daily is sufficient and reduces burden
+Supplier comparison still valid for layers: point-of-lay pullet quality varies by supplier
+Same schema works for both; only recording frequency differs
+
+Farmhand reports deaths:
+
+Worker collects dead birds every morning (this already happens everywhere)
+Worker tells farmer the number
+Farmer writes it down — not worker — to preserve data integrity
+Risk: farmhand reports wrong number (either innocent error or concealing mortality)
+Mitigation: farmer should physically see dead birds periodically (weekly) to cross-check
+This is a behavioral check, not a data field
+
+Worker forgets to remove dead birds from pen:
+
+If dead birds accumulate and are removed in batches, daily count becomes inaccurate
+Behavioral requirement: daily dead-bird removal must be a routine task
+Unknown: how consistently this practice is maintained across small-medium Ghana farms
+
+Incomplete batch data (farmer misses several days):
+
+If farmer misses 3 days of recording due to travel, illness, or emergency, batch total becomes an undercount
+Options: estimate missing days based on surrounding days' rates; note gap in record
+Pattern detection tolerates some data gaps as long as batch totals are roughly accurate
+Perfectionism about data completeness would discourage farmers from continuing after a missed stretch
+
+Pre-existing records (farmer has been farming for years):
+
+Farmer may remember roughly: "That March batch from Akosua was bad, maybe 15% loss"
+These historical memories can be written as estimated batch summaries to serve as baseline
+No back-filling of daily records needed — only batch-level estimates useful for pattern priming
+This lowers the cold-start problem: farmer doesn't need 6 months of new data; has informal history to start from
+
+
+
+CONSOLIDATED SCHEMA OVERVIEW
+PainFields RequiredDaily Recording TimePattern Emerges AfterPrimary Financial Signal#1 Feed Wastage6 fields~45 seconds3-7 daysRunning inventory gap; consumption deviation#2 Selling Window8 (broilers) / 4 (layers)~0 seconds most days1-2 batchesDays-past-target × daily feed cost#3 Supplier Payments6 fields~30 seconds on transaction daysImmediate (per transaction)Balance per supplier; upcoming obligations#4 Labor Cost6 fields~30 secondsImmediate (per pay period)Days worked × agreed rate#5 Mortality Patterns6 fields~20 seconds3-6 months (4-6 batches)Mortality rate by supplier; by season
+
+CROSS-SCHEMA OBSERVATIONS
+1. Overlap and integration opportunities:
+
+Batch start date appears in Pain #2 and Pain #5: one entry serves both
+Flock count appears in Pain #1 and Pain #5: one entry serves both
+A unified "batch page" at batch start could capture: batch ID, start date, supplier, starting count, target sell date — all 5 fields in one 2-minute setup event
+
+2. The 20-second-per-day ceiling:
+
+Pains #3 and #4 have zero daily recording burden on days with no transactions
+Pains #1 and #5 require one number per day
+Pain #2 (broilers) requires near-zero daily effort
+Total daily burden across all 5 pains: under 3 minutes per day on heaviest days
+
+3. The delayed value problem:
+
+Pains #1, #3, #4: value visible within days to weeks
+Pain #2: value visible within 1-2 batch cycles (6-14 weeks)
+Pain #5: value visible only after 4-6 batches (5-8 months minimum)
+Implication: Pains #1, #3, and #4 must generate early wins that motivate continued recording for Pain #5's delayed payoff
+
+4. The single biggest schema risk:
+
+All five schemas assume farmer will consistently record one number at one consistent time each day
+Behavior consistency — not data complexity — is the primary implementation risk
+The schemas are minimal enough to succeed; the habit formation around them is the real design challenge
